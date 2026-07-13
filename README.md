@@ -1,166 +1,207 @@
 # VPN Rotator Windows
 
-A robust, dependency-free local network utility written in Python that controls the OpenVPN client on Windows. It automatically rotates VPN servers, selects the lowest-latency nodes, fetches credentials dynamically, and alerts you of status changes using Windows desktop notifications.
+Un utilitaire réseau local robuste, écrit en Python, sans dépendances externes obligatoires. Il contrôle le client OpenVPN sous Windows, change automatiquement de serveur VPN, sélectionne les serveurs avec la latence la plus faible, récupère les identifiants VPNBook si nécessaire, et affiche des notifications Windows lors des changements d'état.
 
 ---
 
-## Key Features
+## Fonctionnalités principales
 
-1. **Zero-Wait Connection**: Instead of using a fixed sleep timer, the manager monitors OpenVPN log outputs in real-time, completing the connection sequence the instant the tunnel is ready (typically in 3–8 seconds).
-2. **Automated Credentials Scraper**: Automatically scrapes active usernames and passwords from `vpnbook.com/freevpn/openvpn` if the connection fails due to expired credentials (`AUTH_FAILED`).
-3. **Latency-Based Selection**: Probes all `.ovpn` configurations in your `configs/` folder and selects node options from the lowest-ping servers to maximize browsing speeds.
-4. **UDP Protocol with TCP Fallback**: Attempts connections via high-speed UDP (port `25000`) first, automatically reverting to standard TCP if the UDP port is blocked by firewalls or network rules.
-5. **IP Leak & Routing Verification**: Captures your public IP before and after connecting, asserting that they are different. If routing table updates fail, the connection is instantly aborted to prevent IP leakage.
-6. **Windows Desktop Notifications**: Native balloon and action-center toast notifications alert you when the VPN connects, rotates, fails, or disconnects.
-
----
-
-## Tech Stack & Dependencies
-
-*   **Language**: Python 3.10+ (Standard Library only - **Zero external pip package dependencies required!**)
-*   **VPN Engine**: OpenVPN 2.6+ / 2.7+ client installed locally.
-*   **System integration**: Windows PowerShell (harnesses `System.Windows.Forms` for lightweight background notifications).
+1. **Connexion sans attente fixe** : au lieu d'utiliser un simple délai statique, le gestionnaire surveille les logs OpenVPN en temps réel et détecte immédiatement quand le tunnel est prêt, généralement en quelques secondes.
+2. **Récupération automatique des identifiants** : si la connexion échoue à cause d'identifiants expirés (`AUTH_FAILED`), le programme récupère les identifiants actifs depuis `vpnbook.com/freevpn/openvpn` et met à jour `auth.txt`.
+3. **Sélection par latence** : le programme teste les fichiers `.ovpn` du dossier `configs/` et choisit le serveur avec la latence la plus faible.
+4. **UDP avec fallback TCP** : il tente d'abord une connexion UDP sur le port `25000`, puis revient automatiquement au TCP si l'UDP est bloqué ou échoue.
+5. **Vérification de routage et fuite IP** : il compare l'IP publique avant et après connexion. Si l'IP ne change pas, la connexion est annulée pour éviter que le trafic sorte sans VPN.
+6. **Notifications Windows** : des notifications de bureau signalent les connexions, déconnexions, rotations et erreurs.
+7. **Exécution en arrière-plan** : `start` lance le rotator en arrière-plan. Le terminal peut être fermé; le VPN reste actif jusqu'à `stop`.
 
 ---
 
-## Folder Structure
+## Technologies et dépendances
+
+- **Langage** : Python 3.10+.
+- **Dépendances Python** : bibliothèque standard uniquement.
+- **Moteur VPN** : client OpenVPN 2.6+ ou 2.7+ installé localement.
+- **Intégration Windows** : PowerShell et `System.Windows.Forms` pour les notifications légères.
+
+---
+
+## Structure du projet
 
 ```text
 vpn_test/
-├── configs/            # Directory containing your .ovpn server profiles
-├── logs/               # Directory where OpenVPN and rotator logs are written
-├── vpnrotator/         # Core python package modules
-│   ├── cli.py          # Command line interface and parser
-│   ├── config_loader.py# Loads settings and measures server ping latencies
-│   ├── credentials.py  # Website scraper to fetch VPNBook passwords
-│   ├── ip_check.py     # Public IP lookup utility
-│   ├── logging_setup.py# Setup log files and formatting
-│   ├── notification.py # PowerShell wrapper for Windows toast notifications
-│   ├── scheduler.py    # Manages periodic VPN server rotation
-│   └── vpn_manager.py  # Launches OpenVPN processes and monitors logs
-├── README.md           # This documentation file
-├── main.py             # Script entry point
-├── settings.json       # Rotator configuration parameters
-└── auth.txt            # Cached VPN credentials (username and password)
+|-- configs/             # Fichiers .ovpn des serveurs
+|-- logs/                # Logs OpenVPN et rotator, ignores par Git
+|-- vpnrotator/          # Package Python principal
+|   |-- cli.py           # Interface en ligne de commande
+|   |-- config_loader.py # Chargement config + mesure de latence
+|   |-- credentials.py   # Recuperation des identifiants VPNBook
+|   |-- ip_check.py      # Verification de l'IP publique
+|   |-- logging_setup.py # Configuration des logs
+|   |-- notification.py  # Notifications Windows via PowerShell
+|   |-- scheduler.py     # Rotation periodique des serveurs
+|   `-- vpn_manager.py   # Lancement et surveillance d'OpenVPN
+|-- README.md            # Documentation
+|-- main.py              # Point d'entree
+|-- settings.json        # Configuration du rotator
+`-- auth.txt             # Identifiants locaux, ignores par Git
 ```
 
 ---
 
-## Architecture Flow
+## Flux de fonctionnement
 
-The following diagram illustrates how the VPN Rotator starts, connects, checks latency, and fallbacks to TCP:
+Le diagramme suivant résume le démarrage, le choix du serveur, la tentative UDP, le fallback TCP et la vérification du routage :
 
 ```mermaid
 graph TD
-    A[Start Rotator] --> B[Load settings.json]
+    A[Demarrer le rotator] --> B[Charger settings.json]
     B --> C{selection_mode == latency?}
-    C -->|Yes| D[Ping all servers in configs/]
-    C -->|No| E[Select server randomly]
-    D --> F[Sort by latency and pick fastest server]
-    E --> G[Initiate OpenVPN Process]
+    C -->|Oui| D[Tester la latence des serveurs]
+    C -->|Non| E[Choisir un serveur aleatoire]
+    D --> F[Trier par latence et choisir le plus rapide]
+    E --> G[Lancer OpenVPN]
     F --> G
     G --> H{force_udp == true?}
-    H -->|Yes| I[Attempt UDP 25000]
-    H -->|No| J[Attempt default TCP]
-    I --> K{Connects within timeout?}
-    K -->|Yes| L[Check Routing / IP Change]
-    K -->|No| M[Log Failure & Kill Process]
+    H -->|Oui| I[Essayer UDP 25000]
+    H -->|Non| J[Essayer TCP par defaut]
+    I --> K{Connexion avant timeout?}
+    K -->|Oui| L[Verifier routage et changement IP]
+    K -->|Non| M[Logger l'echec et tuer le processus]
     M --> J
-    J --> N{Connects within timeout?}
-    N -->|Yes| L
-    N -->|No| O[Scrape Credentials if AUTH_FAILED]
-    O -->|Success| G
-    O -->|Failure| P[Abort & Send Notification]
-    L -->|IP Changed| Q[Active & Rotate on Timer]
-    L -->|IP Same| P
+    J --> N{Connexion avant timeout?}
+    N -->|Oui| L
+    N -->|Non| O[Recuperer les identifiants si AUTH_FAILED]
+    O -->|Succes| G
+    O -->|Echec| P[Annuler et notifier]
+    L -->|IP changee| Q[Actif et rotation par timer]
+    L -->|IP identique| P
 ```
 
 ---
 
-## Setup & Prerequisites
+## Installation et prérequis
 
-### 1. Requirements
-*   **Windows OS**.
-*   **OpenVPN** installed locally (Default path: `C:\Program Files\OpenVPN\bin\openvpn.exe`).
-*   Put `.ovpn` configuration profiles in the `configs/` folder.
+### 1. Prérequis
 
-### 2. Privilege Setup
-To allow OpenVPN to create virtual network interfaces and modify your system routing table without requiring you to run your command prompt as Administrator every time, you should start the **OpenVPN Interactive Service**:
+- Windows.
+- OpenVPN installé localement.
+- Chemin par défaut attendu :
 
-1. Open **PowerShell as Administrator** (right-click and choose **Run as Administrator**).
-2. Run the following commands:
-   ```powershell
-   Start-Service OpenVPNServiceInteractive
-   Set-Service OpenVPNServiceInteractive -StartupType Automatic
-   ```
-*(Alternatively, you can just execute the python commands from an elevated Administrator terminal).*
+```powershell
+C:\Program Files\OpenVPN\bin\openvpn.exe
+```
+
+- Fichiers `.ovpn` placés dans le dossier `configs/`.
+
+### 2. Droits administrateur
+
+OpenVPN doit pouvoir créer une interface réseau virtuelle et modifier la table de routage Windows. Deux options sont possibles.
+
+Option recommandée : activer le service interactif OpenVPN.
+
+1. Ouvre PowerShell en administrateur.
+2. Exécute :
+
+```powershell
+Start-Service OpenVPNServiceInteractive
+Set-Service OpenVPNServiceInteractive -StartupType Automatic
+```
+
+Autre option : lancer les commandes Python depuis un terminal ouvert en administrateur.
 
 ---
 
 ## Configuration (`settings.json`)
 
-You can customize the behavior by editing `settings.json`:
+Tu peux modifier le comportement dans `settings.json`.
 
-| Parameter | Type | Default | Description |
+| Paramètre | Type | Défaut | Description |
 | :--- | :--- | :--- | :--- |
-| `openvpn_path` | `string` | `C:\\Program Files\\...` | Path to the `openvpn.exe` executable. |
-| `configs_dir` | `string` | `configs` | Directory containing `.ovpn` config files. |
-| `auth_file` | `string` | `auth.txt` | File where credentials will be written/read. |
-| `logs_dir` | `string` | `logs` | Directory where logs are saved. |
-| `rotation_seconds`| `int` | `1800` (30 mins) | Time interval before rotating to another server. |
-| `selection_mode` | `string` | `"latency"` | `"latency"` (fastest server first) or `"random"`. |
-| `avoid_same_server`| `bool` | `true` | Prevent reconnecting to the same server. |
-| `connect_timeout_seconds`| `int`| `25` | Maximum seconds allowed to establish a connection. |
-| `public_ip_check` | `bool` | `true` | Verify public IP change post-connection. |
-| `force_udp` | `bool` | `true` | Force connection through UDP first with TCP fallback. |
+| `openvpn_path` | `string` | `C:\\Program Files\\...` | Chemin vers `openvpn.exe`. |
+| `configs_dir` | `string` | `configs` | Dossier contenant les fichiers `.ovpn`. |
+| `auth_file` | `string` | `auth.txt` | Fichier local des identifiants VPN. |
+| `logs_dir` | `string` | `logs` | Dossier des logs. |
+| `rotation_seconds` | `int` | `1800` | Intervalle avant rotation, en secondes. |
+| `selection_mode` | `string` | `"latency"` | `"latency"` pour choisir le plus rapide, ou `"random"`. |
+| `avoid_same_server` | `bool` | `true` | Évite de reprendre le même serveur à la rotation suivante. |
+| `connect_timeout_seconds` | `int` | `25` | Timeout de connexion TCP. |
+| `udp_connect_timeout_seconds` | `int` | `8` | Timeout de tentative UDP avant fallback TCP. |
+| `public_ip_check` | `bool` | `true` | Vérifie que l'IP publique change après connexion. |
+| `force_udp` | `bool` | `true` | Tente l'UDP avant le TCP. |
 
 ---
 
-## Command Usage
+## Commandes
 
-Run all commands through `main.py`:
+Toutes les commandes se lancent depuis `main.py`.
 
-### Start Automatic Rotation
-Starts the scheduler in the background. The terminal can be closed after this command; the VPN and rotator keep running until you execute `stop`.
+### Démarrer la rotation automatique
+
+Lance le rotator en arrière-plan. Après cette commande, tu peux fermer le terminal : le rotator et le VPN continuent de tourner jusqu'à `stop`.
 
 ```powershell
 python main.py start
 ```
 
-### Stop VPN
-Stops the background rotator first, then terminates the active OpenVPN connection and clears active state. This is the command to use when you want the VPN disconnected.
+### Arrêter le VPN
+
+Arrête d'abord le rotator en arrière-plan, puis déconnecte OpenVPN et nettoie l'état local.
 
 ```powershell
 python main.py stop
 ```
 
-For normal use, these are the only two commands you need:
+Pour l'utilisation normale, ces deux commandes suffisent :
 
 ```powershell
 python main.py start
 python main.py stop
 ```
 
-### Check Current Status
-Displays the current connection status, active server configuration, OpenVPN process ID, connect time, public IP, and the time remaining before the next rotation.
+### Vérifier l'état
+
+Affiche l'état courant : serveur actif, PID OpenVPN, heure de connexion, IP publique et temps restant avant la prochaine rotation.
+
 ```powershell
 python main.py status
 ```
 
-### Force Rotation
-Immediately disconnects the active server and rotates to a new, fast VPN server without waiting for the timer to expire.
+### Forcer une rotation
+
+Déconnecte immédiatement le serveur actuel et reconnecte un nouveau serveur rapide sans attendre la fin du timer.
+
 ```powershell
 python main.py rotate
 ```
 
-### Run Once (Single Session)
-Connects to the fastest server and keeps the connection alive without starting the rotation scheduler.
+### Connexion unique
+
+Connecte le serveur le plus rapide sans démarrer le scheduler de rotation.
+
 ```powershell
 python main.py once
 ```
 
-### List Available Servers
-Lists all `.ovpn` configuration profiles present in your `configs/` directory.
+### Lister les serveurs
+
+Liste tous les fichiers `.ovpn` disponibles dans `configs/`.
+
 ```powershell
 python main.py list
 ```
+
+---
+
+## Sécurité Git
+
+Les fichiers locaux sensibles ou temporaires sont ignorés par Git :
+
+```text
+auth.txt
+logs/
+vpn_state.json
+rotator_state.json
+test_scraper.py
+```
+
+Ne commit jamais `auth.txt`, les logs ou les fichiers d'état runtime.
