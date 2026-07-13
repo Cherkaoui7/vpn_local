@@ -1,0 +1,16 @@
+{
+  "openvpn_path": "C:\\Program Files\\OpenVPN\\bin\\openvpn.exe",
+  "configs_dir": "configs",
+  "auth_file": "auth.txt",
+  "logs_dir": "logs",
+  "state_file": "vpn_state.json",
+  "rotation_seconds": 1800,
+  "selection_mode": "latency",
+  "avoid_same_server": true,
+  "connect_timeout_seconds": 25,
+  "udp_connect_timeout_seconds": 8,
+  "public_ip_check": true,
+  "public_ip_url": "https://api.ipify.org",
+  "openvpn_extra_args": [],
+  "force_udp": true
+}

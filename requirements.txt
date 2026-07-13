@@ -1,0 +1,4 @@
+# No required third-party packages.
+# Optional later:
+# psutil
+# customtkinter
