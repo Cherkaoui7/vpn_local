@@ -56,7 +56,7 @@ graph TD
     B --> C{selection_mode == latency?}
     C -->|Yes| D[Ping all servers in configs/]
     C -->|No| E[Select server randomly]
-    D --> F[Sort by latency and pick from top 3]
+    D --> F[Sort by latency and pick fastest server]
     E --> G[Initiate OpenVPN Process]
     F --> G
     G --> H{force_udp == true?}
@@ -121,14 +121,23 @@ You can customize the behavior by editing `settings.json`:
 Run all commands through `main.py`:
 
 ### Start Automatic Rotation
-Starts the scheduler. It will connect to the fastest server, notify you, and rotate servers automatically according to the configured interval.
+Starts the scheduler in the background. The terminal can be closed after this command; the VPN and rotator keep running until you execute `stop`.
+
 ```powershell
 python main.py start
 ```
 
 ### Stop VPN
-Terminates the active OpenVPN connection safely, resets routing tables, and clears active state.
+Stops the background rotator first, then terminates the active OpenVPN connection and clears active state. This is the command to use when you want the VPN disconnected.
+
 ```powershell
+python main.py stop
+```
+
+For normal use, these are the only two commands you need:
+
+```powershell
+python main.py start
 python main.py stop
 ```
 

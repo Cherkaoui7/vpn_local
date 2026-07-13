@@ -15,6 +15,11 @@ from .credentials import fetch_vpnbook_credentials, update_auth_file
 from .notification import send_desktop_notification
 
 
+CREATE_NEW_PROCESS_GROUP = 0x00000200
+CREATE_NO_WINDOW = 0x08000000
+OPENVPN_CREATIONFLAGS = CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
+
+
 @dataclass
 class VpnState:
     pid: int
@@ -81,7 +86,8 @@ class VpnManager:
             cwd=str(self.settings.project_dir),
             stdout=log_file,
             stderr=subprocess.STDOUT,
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP") else 0,
+            stdin=subprocess.DEVNULL,
+            creationflags=OPENVPN_CREATIONFLAGS,
         )
 
         state = VpnState(
