@@ -3,6 +3,8 @@ __pycache__/
 .venv/
 venv/
 logs/
+auth.txt
 vpn_state.json
 rotator_state.json
+test_scraper.py
 *.log
