@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('.venv/Lib/site-packages/customtkinter', 'customtkinter/')],
+    datas=[('settings.json', '.'), ('configs', 'configs'), ('openvpn_bin', 'openvpn_bin'), ('.venv/Lib/site-packages/customtkinter', 'customtkinter/')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

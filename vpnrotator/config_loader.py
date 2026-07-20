@@ -40,20 +40,47 @@ def _resolve(project_dir: Path, value: str | None) -> Path | None:
 def load_settings(path: str | Path = "settings.json") -> Settings:
     settings_path = Path(path)
     if not settings_path.is_absolute():
-        # 1. Check next to the running executable (if frozen via PyInstaller)
         if getattr(sys, 'frozen', False):
-            candidate = Path(sys.executable).parent / settings_path
-            if candidate.exists():
-                settings_path = candidate
-            else:
-                # 2. Check in the default project folder
-                fallback = Path(r"C:\Users\USER\Documents\vpn\vpn_local") / settings_path
-                if fallback.exists():
-                    settings_path = fallback
-                else:
-                    settings_path = settings_path.resolve()
+            # Standalone Executable mode: store all settings and configs in a persistent folder in the user's home directory
+            app_dir = Path.home() / ".vpnprivate"
+            app_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Copy settings.json from bundle if missing
+            settings_dest = app_dir / "settings.json"
+            if not settings_dest.exists():
+                src = Path(sys._MEIPASS) / "settings.json"
+                if src.exists():
+                    import shutil
+                    shutil.copy2(src, settings_dest)
+                    
+            # Sync configs folder from bundle
+            configs_dest = app_dir / "configs"
+            configs_dest.mkdir(parents=True, exist_ok=True)
+            src_configs = Path(sys._MEIPASS) / "configs"
+            if src_configs.exists():
+                import shutil
+                for item in src_configs.glob("*.ovpn"):
+                    dest_file = configs_dest / item.name
+                    # Copy if missing or if the size changed (updates from the bundle)
+                    if not dest_file.exists() or dest_file.stat().st_size != item.stat().st_size:
+                        shutil.copy2(item, dest_file)
+
+            # Sync openvpn_bin folder from bundle
+            openvpn_bin_dest = app_dir / "openvpn_bin"
+            openvpn_bin_dest.mkdir(parents=True, exist_ok=True)
+            src_openvpn_bin = Path(sys._MEIPASS) / "openvpn_bin"
+            if src_openvpn_bin.exists():
+                import shutil
+                for item in src_openvpn_bin.glob("*"):
+                    if item.is_file():
+                        dest_file = openvpn_bin_dest / item.name
+                        # Copy if missing or if the size changed
+                        if not dest_file.exists() or dest_file.stat().st_size != item.stat().st_size:
+                            shutil.copy2(item, dest_file)
+            
+            settings_path = settings_dest
         else:
-            # 3. Running as script - check in the script's folder
+            # Script / Dev mode: check in local workspace
             script_candidate = Path(__file__).resolve().parent.parent / settings_path
             if script_candidate.exists():
                 settings_path = script_candidate
@@ -67,9 +94,20 @@ def load_settings(path: str | Path = "settings.json") -> Settings:
     with settings_path.open("r", encoding="utf-8") as file:
         raw = json.load(file)
 
+    if getattr(sys, 'frozen', False):
+        default_openvpn = project_dir / "openvpn_bin" / "openvpn.exe"
+    else:
+        default_openvpn = Path(r"C:\Program Files\OpenVPN\bin\openvpn.exe")
+
+    configured_path = _resolve(project_dir, raw.get("openvpn_path"))
+    if not configured_path or not configured_path.exists() or "C:\\Program Files\\OpenVPN" in str(configured_path):
+        openvpn_path = default_openvpn
+    else:
+        openvpn_path = configured_path
+
     return Settings(
         project_dir=project_dir,
-        openvpn_path=_resolve(project_dir, raw.get("openvpn_path")) or Path("openvpn.exe"),
+        openvpn_path=openvpn_path,
         configs_dir=_resolve(project_dir, raw.get("configs_dir")) or project_dir / "configs",
         auth_file=_resolve(project_dir, raw.get("auth_file")),
         logs_dir=_resolve(project_dir, raw.get("logs_dir")) or project_dir / "logs",
