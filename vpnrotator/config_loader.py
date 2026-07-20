@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import random
 import socket
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,7 +38,30 @@ def _resolve(project_dir: Path, value: str | None) -> Path | None:
 
 
 def load_settings(path: str | Path = "settings.json") -> Settings:
-    settings_path = Path(path).resolve()
+    settings_path = Path(path)
+    if not settings_path.is_absolute():
+        # 1. Check next to the running executable (if frozen via PyInstaller)
+        if getattr(sys, 'frozen', False):
+            candidate = Path(sys.executable).parent / settings_path
+            if candidate.exists():
+                settings_path = candidate
+            else:
+                # 2. Check in the default project folder
+                fallback = Path(r"C:\Users\USER\Documents\vpn\vpn_local") / settings_path
+                if fallback.exists():
+                    settings_path = fallback
+                else:
+                    settings_path = settings_path.resolve()
+        else:
+            # 3. Running as script - check in the script's folder
+            script_candidate = Path(__file__).resolve().parent.parent / settings_path
+            if script_candidate.exists():
+                settings_path = script_candidate
+            else:
+                settings_path = settings_path.resolve()
+    else:
+        settings_path = settings_path.resolve()
+
     project_dir = settings_path.parent
 
     with settings_path.open("r", encoding="utf-8") as file:
