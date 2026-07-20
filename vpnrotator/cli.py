@@ -37,6 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("list", help="Liste les fichiers .ovpn disponibles.")
     subparsers.add_parser("once", help="Connecte un serveur aleatoire sans rotation.")
     subparsers.add_parser("rotate", help="Force immediatement un changement de serveur.")
+    subparsers.add_parser("gui", help="Lance l'interface graphique VpnPrivate.")
     return parser
 
 
@@ -59,6 +60,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "stop":
             _stop_background(settings)
             manager.disconnect()
+            return 0
+
+        if args.command == "gui":
+            from .gui import run_gui
+            run_gui(Path(args.settings))
             return 0
 
         if args.command == "status":
