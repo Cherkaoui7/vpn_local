@@ -46,6 +46,9 @@ def main(argv: list[str] | None = None) -> int:
     if "run" in argv:
         return _run_background_worker(argv)
 
+    if not argv:
+        argv = ["gui"]
+
     parser = build_parser()
     args = parser.parse_args(argv)
 
